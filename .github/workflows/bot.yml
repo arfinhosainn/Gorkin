@@ -8,6 +8,7 @@ on:
 jobs:
   run-bot:
     runs-on: ubuntu-latest
+    timeout-minutes: 5  # Set a timeout to ensure the job doesn't run indefinitely
     
     steps:
       - name: Checkout code
@@ -21,7 +22,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r gorkins/requirements.txt
+          pip install -r requirements.txt
           
       - name: Run bot
         env:
@@ -31,5 +32,23 @@ jobs:
           ACCESS_TOKEN_SECRET: ${{ secrets.ACCESS_TOKEN_SECRET }}
           BEARER_TOKEN: ${{ secrets.BEARER_TOKEN }}
         run: |
-          cd gorkins
-          python src/main.py 
+          cd src
+          echo 'import os
+          import random
+          from datetime import datetime
+          from dotenv import load_dotenv
+          from bot import GorkinBot
+
+          # Initialize bot
+          load_dotenv()
+          bot = GorkinBot()
+
+          # Post a random thought
+          if random.random() < 0.7:  # 70% chance to tweet
+              print("Attempting to post a random thought...")
+              bot.post_random_thought()
+
+          # Check mentions
+          print("Checking for mentions...")
+          bot.process_mentions()' > run_once.py
+          python run_once.py 
