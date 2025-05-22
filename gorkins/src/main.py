@@ -1,50 +1,48 @@
 """
-Main script to run the Gorkin bot
+Main script for running the Gorkin bot continuously
 """
 
 import os
 import time
 import random
-from dotenv import load_dotenv
 from datetime import datetime, timedelta
-
+from dotenv import load_dotenv
 from bot import GorkinBot
-from ..config import settings
 
 def main():
     # Load environment variables
     load_dotenv()
     
-    # Initialize bot
+    # Initialize the bot
     bot = GorkinBot()
-    print("gorkin bot is now online and ready to cause chaos 🔥")
     
-    # Track last trending check
-    last_trending_check = datetime.now() - timedelta(hours=2)
+    # Track last action times
+    last_tweet_time = datetime.now() - timedelta(minutes=15)  # Start ready to tweet
+    last_mention_check = datetime.now() - timedelta(minutes=5)  # Start ready to check mentions
+    
+    print("🤖 Gorkin bot is starting up...")
     
     while True:
         try:
-            # Process mentions first
-            bot.process_mentions()
+            current_time = datetime.now()
             
-            # Post random thoughts or market commentary
-            bot.post_random_thought()
+            # Post random thoughts every 15-30 minutes
+            if (current_time - last_tweet_time).total_seconds() >= 900:  # 15 minutes
+                if random.random() < 0.7:  # 70% chance to tweet
+                    bot.post_random_thought()
+                last_tweet_time = current_time
             
-            # Check trending topics every hour
-            now = datetime.now()
-            if (now - last_trending_check).total_seconds() >= 3600:
-                topics = bot.get_trending_topics()
-                if topics:
-                    # React to a random trending topic
-                    bot.react_to_trending(random.choice(topics))
-                last_trending_check = now
+            # Check mentions every 2 minutes
+            if (current_time - last_mention_check).total_seconds() >= 120:
+                bot.process_mentions()
+                last_mention_check = current_time
             
-            # Sleep to avoid hitting rate limits
-            time.sleep(60)  # Check every minute
+            # Sleep for a bit to prevent hitting rate limits
+            time.sleep(30)
             
         except Exception as e:
             print(f"Error in main loop: {e}")
-            time.sleep(300)  # Sleep for 5 minutes on error
+            time.sleep(60)  # Wait a minute before retrying on error
 
 if __name__ == "__main__":
     main() 
