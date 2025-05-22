@@ -21,20 +21,34 @@ from config import settings, responses
 class GorkinBot:
     def __init__(self):
         """Initialize the Gorkin bot"""
-        # Twitter API authentication using OAuth 2.0
+        # Get Twitter API credentials
+        self.api_key = os.getenv("API_KEY")
+        self.api_key_secret = os.getenv("API_KEY_SECRET")
+        self.access_token = os.getenv("ACCESS_TOKEN")
+        self.access_token_secret = os.getenv("ACCESS_TOKEN_SECRET")
+        self.bearer_token = os.getenv("BEARER_TOKEN")
+
+        # Validate credentials
+        self._validate_credentials()
+        
+        # Twitter API authentication using OAuth 1.0a
         self.client = tweepy.Client(
-            bearer_token=os.getenv("BEARER_TOKEN"),
-            consumer_key=os.getenv("CLIENT_ID"),
-            consumer_secret=os.getenv("CLIENT_SECRET"),
+            bearer_token=self.bearer_token,
+            consumer_key=self.api_key,
+            consumer_secret=self.api_key_secret,
+            access_token=self.access_token,
+            access_token_secret=self.access_token_secret,
             wait_on_rate_limit=True
         )
         
         # Get and store our user ID
         try:
             self.user_id = self.client.get_me()[0].id
+            print(f"✅ Successfully authenticated as user ID: {self.user_id}")
         except Exception as e:
-            print(f"Error getting user ID: {e}")
-            self.user_id = None
+            print(f"❌ Error getting user ID: {e}")
+            print("Please check your Twitter API credentials")
+            sys.exit(1)
         
         # Track last mention ID
         self.last_mention_id = None
@@ -51,6 +65,27 @@ class GorkinBot:
         # Initialize counters
         self.tweet_count = self._get_tweet_count()
         self.start_time = self._get_start_time()
+    
+    def _validate_credentials(self):
+        """Validate that all required credentials are present"""
+        missing = []
+        if not self.api_key:
+            missing.append("API_KEY")
+        if not self.api_key_secret:
+            missing.append("API_KEY_SECRET")
+        if not self.access_token:
+            missing.append("ACCESS_TOKEN")
+        if not self.access_token_secret:
+            missing.append("ACCESS_TOKEN_SECRET")
+        if not self.bearer_token:
+            missing.append("BEARER_TOKEN")
+        
+        if missing:
+            print("❌ Missing required Twitter API credentials:")
+            for cred in missing:
+                print(f"  - {cred}")
+            print("\nPlease set these environment variables in your .env file or GitHub Secrets")
+            sys.exit(1)
     
     def _get_tweet_count(self) -> int:
         """Get total tweet count from Redis"""
@@ -90,14 +125,24 @@ class GorkinBot:
         """Post a tweet"""
         try:
             if self._can_tweet():
-                self.client.create_tweet(text=text.lower())  # Always lowercase
-                self._increment_tweet_count()
-                self._update_last_tweet()
-                self.last_tweet_time = datetime.now()
-                return True
-            return False
+                print(f"📝 Attempting to post tweet: {text}")
+                response = self.client.create_tweet(text=text.lower())  # Always lowercase
+                if response and response.data:
+                    tweet_id = response.data['id']
+                    print(f"✅ Successfully posted tweet with ID: {tweet_id}")
+                    self._increment_tweet_count()
+                    self._update_last_tweet()
+                    self.last_tweet_time = datetime.now()
+                    return True
+                else:
+                    print("❌ Tweet creation failed - no response data")
+                    return False
+            else:
+                print("⏳ Can't tweet yet - waiting for rate limit")
+                return False
         except Exception as e:
-            print(f"Error tweeting: {e}")
+            print(f"❌ Error tweeting: {str(e)}")
+            print(f"Error details: {type(e).__name__}")
             return False
     
     def reply_to_tweet(self, tweet_id: str, text: str) -> bool:
@@ -153,24 +198,32 @@ class GorkinBot:
     def post_random_thought(self):
         """Post a random thought or market commentary"""
         if not self._can_tweet():
+            print("⏳ Waiting for tweet cooldown...")
             return
             
         try:
             # Decide what type of tweet to post
             if random.random() < 0.6:  # 60% chance for market thoughts
                 tweet = responses.get_market_thought()
+                print(f"💭 Generated market thought: {tweet}")
             else:
                 tweet = random.choice(responses.RANDOM_THOUGHTS).format(
                     count=random.randint(50, 150),
                     days=random.randint(1, 14),
                     emoji=random.choice(settings.EMOJIS)
                 )
+                print(f"💭 Generated random thought: {tweet}")
             
             # Post the tweet
-            self.tweet(tweet)
+            success = self.tweet(tweet)
+            if success:
+                print("✨ Tweet posted successfully!")
+            else:
+                print("❌ Failed to post tweet")
             
         except Exception as e:
-            print(f"Error posting tweet: {e}")
+            print(f"❌ Error in post_random_thought: {str(e)}")
+            print(f"Error details: {type(e).__name__}")
     
     def check_trending_topics(self):
         """Check trending topics and react to them"""
